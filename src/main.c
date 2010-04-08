@@ -256,7 +256,9 @@ int perform_scan(char *username) {
 				return -1;
 			}
 
-		}
+		} else 
+			TRACE(TRACE_INFO,"no quarantine configured, message discarded");
+		
 		if (score	!= NULL)
 			free(score);
 		return 1;
