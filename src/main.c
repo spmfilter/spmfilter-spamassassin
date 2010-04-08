@@ -91,6 +91,7 @@ int write_to_quarantine(char *score) {
 	}
 
 	fprintf(fh,"subject:%s\n",smf_session_header_get("subject"));
+	fpritnf(fh,"score:%s\n",score);
 	fclose(fh);
 
 	free(md5);
@@ -249,10 +250,15 @@ int perform_scan(char *username) {
 
 	if (is_spam) {
 		if (spam_settings->quarantine_dir != NULL) {
-
-			if (write_to_quarantine(score) != 0)
+			if (write_to_quarantine(score) != 0) {
+				if (score != NULL)
+					free(score);
 				return -1;
+			}
+
 		}
+		if (score	!= NULL)
+			free(score);
 		return 1;
 	} else
 		return 0;
