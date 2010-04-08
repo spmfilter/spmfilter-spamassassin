@@ -25,6 +25,7 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <glib.h>
+#include <glib/gstdio.h>
 
 #include <spmfilter.h>
 
@@ -34,37 +35,20 @@
 
 SpamSettings_T *spam_settings;
 
-int get_spam_config(void) {
-	spam_settings = g_slice_new(SpamSettings_T);
-
-	if (smf_settings_group_load(THIS_MODULE) != 0) {
-		TRACE(TRACE_ERR,"config group spamassassin does not exist");
-		return -1;
-	}
-
-	spam_settings->host = smf_settings_group_get_string("host");
-	
-	spam_settings->port = smf_settings_group_get_integer("port");
-	if (!spam_settings->port)
-		spam_settings->port = 783;
-	
-	TRACE(TRACE_DEBUG,"spam_settings->host: %s",spam_settings->host);
-	TRACE(TRACE_DEBUG,"spam_settings->port: %d",spam_settings->port);
-	
-	return 0;
-}
-
-int load(SMFSession_T *session) {
-	int fd_socket, errno, ret, fh;
+int perform_scan(char *username) {
+	SMFSession_T *session = smf_session_get();
+	int fd_socket, errno, ret, fh,fh2;
+	gboolean is_spam = FALSE;
 	struct sockaddr_in sa;
-	int bytes = 0;
+	gsize *bytes;
 	char buf[BUFSIZE];
 	char *cmd_size;
-
-	TRACE(TRACE_DEBUG,"spamassassin loaded");
-	if (get_spam_config()!=0)
-		return -1;
-
+	char *cmd_username;
+	char *new_queue_file;
+	GIOChannel *spamd = NULL;
+	GIOChannel *queue = NULL;
+	GIOChannel *new_queue = NULL;
+	
 	sa.sin_family = AF_INET;
 	sa.sin_port = htons(spam_settings->port);
 	sa.sin_addr.s_addr = inet_addr(spam_settings->host);
@@ -73,17 +57,19 @@ int load(SMFSession_T *session) {
 	fd_socket = socket(AF_INET, SOCK_STREAM, 0);
 	if(fd_socket < 0) {
 		TRACE(TRACE_ERR,"create socket failed: %s",strerror(errno));
-		return -1; 
+		return -1;
 	}
-	
+
 	ret = connect(fd_socket, (struct sockaddr *)&sa, sizeof(sa));
 	if(ret < 0) {
 		TRACE(TRACE_ERR, "unable to connect to [%s]: %s", spam_settings->host, strerror(errno));
 		return -1;
 	}
 
+	spamd = g_io_channel_unix_new(fd_socket);
+	g_io_channel_set_encoding(spamd, NULL, NULL);
 	TRACE(TRACE_DEBUG,"sending command: %s",CMD_PROCESS);
-	
+
 	ret = send(fd_socket, CMD_PROCESS, strlen(CMD_PROCESS), 0);
 	if (ret <= 0) {
 		TRACE(TRACE_ERR, "sending of command failed: %s",strerror(errno));
@@ -101,6 +87,18 @@ int load(SMFSession_T *session) {
 		return -1;
 	}
 
+	if (username != NULL) {
+		cmd_username = g_strdup_printf("%s %s\r\n",CMD_USERNAME, username);
+		TRACE(TRACE_DEBUG,"sending command: %s",cmd_username);
+
+		ret = send(fd_socket, cmd_username, strlen(cmd_username), 0);
+		if (ret <= 0) {
+			TRACE(TRACE_ERR, "sending of command failed: %s",strerror(errno));
+			close(fd_socket);
+			return -1;
+		}
+	}
+
 	TRACE(TRACE_DEBUG,"sending blank line");
 	ret = send(fd_socket, "\r\n" , strlen("\r\n"), 0);
 	if (ret <= 0) {
@@ -109,32 +107,122 @@ int load(SMFSession_T *session) {
 		return -1;
 	}
 
-	
+
 	fh = open(session->queue_file, O_RDONLY);
-	if(fh < 0) {
+	if(fh == -1) {
 		TRACE(TRACE_ERR, "unable to open queue file [%s]: %s", session->queue_file, strerror(errno));
 		close(fd_socket);
 		return -1;
 	}
 
-
-	while((bytes = read(fh, buf, BUFSIZE)) > 0) {
+	queue = g_io_channel_unix_new(fh);
+	g_io_channel_set_encoding(queue, NULL, NULL);
+	while(g_io_channel_read_chars(queue,buf,BUFSIZE,&bytes,NULL) == G_IO_STATUS_NORMAL) {
 		ret = send(fd_socket, buf, BUFSIZE, 0);
 		if(ret <= 0) {
 			TRACE(TRACE_ERR,"failed to send a chunk: %s",strerror(errno));
 			close(fd_socket);
+			g_io_channel_shutdown(queue,FALSE,NULL);
 			close(fh);
 			return -1;
 		}
 	}
-
+	g_io_channel_shutdown(queue,FALSE,NULL);
 	close(fh);
 
-	ret = recv(fd_socket, buf, BUFSIZE, 0);
-	TRACE(TRACE_DEBUG,"got %d bytes back, message was: %s", ret, buf);
+	smf_core_gen_queue_file(&new_queue_file);
+	if ((fh2 = open(new_queue_file,O_WRONLY|O_CREAT)) == -1) {
+		TRACE(TRACE_ERR,"failed writing queue file");
+		close(fd_socket);
+		return -1;
+	}
+
+	new_queue = g_io_channel_unix_new(fh2);
+	g_io_channel_set_encoding(new_queue, NULL, NULL);
+	while((ret = recv(fd_socket,buf,BUFSIZE, 0)) > 0) {
+		if (g_strrstr(buf,"SPAMD/1.1") != NULL) {
+			gchar **token = NULL;
+			int pos = 0;
+			token = g_strsplit(buf,"\r\n\r\n",2);
+			pos = 4;
+			if (token == NULL) {
+				token = g_strsplit(buf,"\n\n",2);
+				pos = 2;
+			}
+
+			if (g_strrstr(token[1],"X-Spam-Flag: YES") != NULL) {
+				TRACE(TRACE_INFO,"message [%s] identified as spam",smf_session_header_get("message-id"));
+				is_spam = TRUE;
+			}
+			pos += strlen(token[0]);
+			g_io_channel_write_chars(new_queue,buf + pos,ret - pos,NULL,NULL);
+			g_strfreev(token);
+			
+		} else {
+			g_io_channel_write_chars(new_queue,buf,ret,NULL,NULL);
+		}
+	}
+
+	g_io_channel_shutdown(new_queue,TRUE,NULL);
+	close(fh2);
 	close(fd_socket);
 
-	g_slice_free(SpamSettings_T,spam_settings);
+	if (g_remove(session->queue_file) != 0) {
+		TRACE(TRACE_ERR,"failed to remove queue file");
+		return -1;
+	}
+
+	if(g_rename(new_queue_file,session->queue_file) != 0) {
+		TRACE(TRACE_ERR,"failed to rename queue file");
+		return -1;
+	}
+
+	g_free(new_queue_file);
+
+	if (is_spam) {
+		if (spam_settings->quarantine_dir != NULL) {
+			// TODO: check quarantine_dir exists
+			char *quarantine_path;
+			quarantine_path = g_strdup_printf("%s/%s",spam_settings->quarantine_dir,smf_core_get_maildir_filename());
+			TRACE(TRACE_DEBUG,"writting message to quarantine [%s]",quarantine_path);
+			smf_session_to_file(quarantine_path);
+		}
+		return 1;
+	} else
+		return 0;
+}
+
+int get_spam_config(void) {
+	spam_settings = g_slice_new(SpamSettings_T);
+
+	if (smf_settings_group_load(THIS_MODULE) != 0) {
+		TRACE(TRACE_ERR,"config group spamassassin does not exist");
+		return -1;
+	}
+
+	spam_settings->host = smf_settings_group_get_string("host");
+	
+	spam_settings->port = smf_settings_group_get_integer("port");
+	if (!spam_settings->port)
+		spam_settings->port = 783;
+
+	spam_settings->quarantine_dir = smf_settings_group_get_string("quarantine_dir");
+
+	TRACE(TRACE_DEBUG,"spam_settings->host: %s",spam_settings->host);
+	TRACE(TRACE_DEBUG,"spam_settings->port: %d",spam_settings->port);
+	TRACE(TRACE_DEBUG,"spam_settings->quarantine_dir: %s", spam_settings->quarantine_dir);
 
 	return 0;
+}
+
+int load(SMFSession_T *session) {
+	int ret;
+	TRACE(TRACE_DEBUG,"spamassassin loaded");
+	if (get_spam_config()!=0)
+		return -1;
+
+	ret = perform_scan(NULL);
+	g_slice_free(SpamSettings_T,spam_settings);
+
+	return ret;
 }

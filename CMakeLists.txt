@@ -10,9 +10,14 @@ if(PREFIX)
     SET(CMAKE_INSTALL_PREFIX ${PREFIX})
 endif(PREFIX)
 
+# check libdir
+if(NOT LIBDIR)
+        set(LIBDIR "lib")
+endif(NOT LIBDIR)
+
 include(FindPkgConfig)
 
-pkg_search_module(SPMFILTER REQUIRED spmfilter >= 0.3)
+pkg_search_module(SPMFILTER REQUIRED spmfilter >= 0.4)
 if(SPMFILTER_FOUND)
     include_directories(${SPMFILTER_INCLUDE_DIRS})
     link_directories(${SPMFILTER_LIBRARY_DIRS})
@@ -36,9 +41,22 @@ file(READ ${CMAKE_CURRENT_SOURCE_DIR}/VERSION PLUGIN_VERSION)
 
 add_subdirectory(src)
 
-# * * * custom targets * * *
-set(PLUGIN_ARCHIVE_NAME "${CMAKE_PROJECT_NAME}-${PLUGIN_VERSION}")
+set(CPACK_PACKAGE_NAME "spmfilter-spamassassin")
+set(CPACK_PACKAGE_VENDOR "spmfilter.org")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "plugin to spam-check mails with spamassassin (SPAMD)")
+set(CPACK_PACKAGE_DESCRIPTION_FILE ${CMAKE_CURRENT_SOURCE_DIR}/README)
+set(CPACK_PACKAGE_VERSION ${PLUGIN_VERSION})
+set(CPACK_COMPONENTS_ALL applications libraries headers)
 
-add_custom_target(dist
-    COMMAND hg archive --prefix="${PLUGIN_ARCHIVE_NAME}" -t tgz "${PLUGIN_ARCHIVE_NAME}.tar.gz"
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+set(CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${PLUGIN_VERSION}")
+set(CPACK_SOURCE_GENERATOR TGZ)
+set(CPACK_SOURCE_IGNORE_FILES
+"\\\\.hg"
+"nbproject"
+"cmake_build"
+"build\\\\.properties"
+"spmfilter-spamassassin-Makefile\\\\.mk"
+"\\\\.dep\\\\.inc"
+)
+
+include(CPack)

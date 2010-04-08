@@ -19,8 +19,8 @@
 #define	_MAIN_H
 
 #define CMD_PROCESS "PROCESS SPAMC/1.2\r\n"
-#define CMD_SIZE "Content-length: "
-
+#define CMD_SIZE "Content-length:"
+#define CMD_USERNAME "User:"
 
 enum {
 	BUFSIZE = 1024
@@ -29,6 +29,7 @@ enum {
 typedef struct {
 	char *host;
 	int port;
+	char *quarantine_dir;
 } SpamSettings_T;
 
 #endif	/* _MAIN_H */
