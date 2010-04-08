@@ -91,7 +91,7 @@ int write_to_quarantine(char *score) {
 	}
 
 	fprintf(fh,"subject:%s\n",smf_session_header_get("subject"));
-	fpritnf(fh,"score:%s\n",score);
+	fprintf(fh,"score:%s\n",score);
 	fclose(fh);
 
 	free(md5);
