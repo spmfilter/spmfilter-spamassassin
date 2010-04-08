@@ -295,6 +295,7 @@ int load(SMFSession_T *session) {
 	if (get_spam_config()!=0)
 		return -1;
 
+	// TODO: send username for spamd user command
 	ret = perform_scan(NULL);
 	g_slice_free(SpamSettings_T,spam_settings);
 
