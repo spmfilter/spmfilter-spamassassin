@@ -35,16 +35,83 @@
 
 SpamSettings_T *spam_settings;
 
+int write_to_quarantine(char *score) {
+	SMFSession_T *session = smf_session_get();
+	char *quarantine_path;
+	char *quarantine_filename;
+	char *quarantine_info;
+	char *filename;
+	char *md5;
+	int c,i;
+	FILE *fh;
+
+	md5 = smf_md5sum(filename);
+	quarantine_path = g_strdup(spam_settings->quarantine_dir);
+	for(c=0; c <=5; c++) {
+		quarantine_path = g_strdup_printf("%s/%c",quarantine_path,md5[c]);
+	}
+
+	if (g_mkdir_with_parents(quarantine_path,0755) == -1) {
+		TRACE(TRACE_ERR,"failed to create quarantine dir");
+		free(md5);
+		free(quarantine_path);
+		return -1;
+	}
+	filename = smf_core_get_maildir_filename();
+	quarantine_filename = g_strdup_printf("%s/%s",quarantine_path,filename);
+	quarantine_info = g_strdup_printf("%s.info",quarantine_filename);
+	TRACE(TRACE_DEBUG,"writting message to quarantine [%s]",quarantine_filename);
+	smf_session_to_file(quarantine_filename);
+
+	fh = fopen(quarantine_info,"w");
+	if (fh == NULL) {
+		TRACE(TRACE_ERR,"failed to write quarantine info");
+		free(md5);
+		free(filename);
+		free(quarantine_path);
+		free(quarantine_filename);
+		free(quarantine_info);
+		return -1;
+	}
+
+	fprintf(fh,"mid:%s\n",smf_session_header_get("message-id"));
+	if (session->envelope_from != NULL)
+		fprintf(fh,"envelope-from:%s\n",session->envelope_from->addr);
+	if (session->envelope_to != NULL) {
+		for(i = 0; i < session->envelope_to_num; i++) {
+			fprintf(fh,"envelope-to:%s\n",session->envelope_to[i]->addr);
+		}
+	}
+	if (session->message_from != NULL)
+		fprintf(fh,"message-from:%s\n",session->message_from->addr);
+	if (session->message_to != NULL) {
+		for(i = 0; i < session->message_to_num; i++) {
+			fprintf(fh,"message-to:%s\n",session->message_to[i]->addr);
+		}
+	}
+
+	fprintf(fh,"subject:%s\n",smf_session_header_get("subject"));
+	fclose(fh);
+
+	free(md5);
+	free(filename);
+	free(quarantine_path);
+	free(quarantine_filename);
+	free(quarantine_info);
+
+	return 0;
+}
+
 int perform_scan(char *username) {
 	SMFSession_T *session = smf_session_get();
 	int fd_socket, errno, ret, fh,fh2;
 	gboolean is_spam = FALSE;
 	struct sockaddr_in sa;
-	gsize *bytes;
 	char buf[BUFSIZE];
 	char *cmd_size;
 	char *cmd_username;
 	char *new_queue_file;
+	char *score;
 	GIOChannel *spamd = NULL;
 	GIOChannel *queue = NULL;
 	GIOChannel *new_queue = NULL;
@@ -117,7 +184,7 @@ int perform_scan(char *username) {
 
 	queue = g_io_channel_unix_new(fh);
 	g_io_channel_set_encoding(queue, NULL, NULL);
-	while(g_io_channel_read_chars(queue,buf,BUFSIZE,&bytes,NULL) == G_IO_STATUS_NORMAL) {
+	while(g_io_channel_read_chars(queue,buf,BUFSIZE,NULL,NULL) == G_IO_STATUS_NORMAL) {
 		ret = send(fd_socket, buf, BUFSIZE, 0);
 		if(ret <= 0) {
 			TRACE(TRACE_ERR,"failed to send a chunk: %s",strerror(errno));
@@ -151,7 +218,8 @@ int perform_scan(char *username) {
 			}
 
 			if (g_strrstr(token[1],"X-Spam-Flag: YES") != NULL) {
-				TRACE(TRACE_INFO,"message [%s] identified as spam",smf_session_header_get("message-id"));
+				score = smf_core_get_substring(".*X-Spam-Status:\\s+Yes,\\s+score=(.*)\\s+required.*",token[1],1);
+				TRACE(TRACE_INFO,"message [%s] identified as spam, score [%s]",smf_session_header_get("message-id"),score);
 				is_spam = TRUE;
 			}
 			pos += strlen(token[0]);
@@ -181,11 +249,9 @@ int perform_scan(char *username) {
 
 	if (is_spam) {
 		if (spam_settings->quarantine_dir != NULL) {
-			// TODO: check quarantine_dir exists
-			char *quarantine_path;
-			quarantine_path = g_strdup_printf("%s/%s",spam_settings->quarantine_dir,smf_core_get_maildir_filename());
-			TRACE(TRACE_DEBUG,"writting message to quarantine [%s]",quarantine_path);
-			smf_session_to_file(quarantine_path);
+
+			if (write_to_quarantine(score) != 0)
+				return -1;
 		}
 		return 1;
 	} else
