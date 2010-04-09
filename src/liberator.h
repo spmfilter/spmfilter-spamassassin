@@ -18,6 +18,8 @@
 #ifndef _LIBERATOR_H
 #define	_LIBERATOR_H
 
+#define DEFAULT_CONF "/etc/spmfilter.conf"
+
 typedef struct {
 	gchar *subject;
 	gchar *date;

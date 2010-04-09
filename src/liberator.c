@@ -113,21 +113,65 @@ void display_info(int id, SMFSpamInfo_T *info) {
 
 }
 
+void show_message(int id) {
+	GError *error = NULL;
+	gchar *message = NULL;
+	SMFSpamInfo_T *info = (SMFSpamInfo_T *)g_slist_nth_data(messages_found,id - 1);
+	g_printf("I: %d\n",g_slist_length(messages_found));
+	g_printf("P: %s\n",info->path);
+	if(!g_file_get_contents(info->path,&message,NULL,&error)) {
+		g_printerr("%s\n",error->message);
+		g_error_free(error);
+	} else {
+		g_printf("%s",message);
+	}
+}
+
+void delete_message(int id) {
+	SMFSpamInfo_T *info = (SMFSpamInfo_T *)g_slist_nth_data(messages_found,id - 1);
+	if (g_remove(info->path) != 0) {
+		g_printerr("failed to remove message\n");
+		exit(1);
+	}
+
+	if (g_remove(g_strdup_printf("%s.info",info->path)) != 0) {
+		g_printerr("failed to remove message\n");
+		exit(1);
+	}
+}
+
 void check_quarantine(char *quarantine_dir) {
-	int i = 1;
+	char choice[1024];
 	int id;
+	int i = 1;
+	GSList *iter;
 	scan_directory(quarantine_dir);
 
-	while (messages_found) {
+	iter = messages_found;
+	while (iter) {
 		display_info(i, (SMFSpamInfo_T *)messages_found->data);
-		messages_found = messages_found->next;
+		iter = iter->next;
 		i++;
 	}
 
-	g_printf("Enter ID: ");
+	for (i=0; i< 100; i++)
+		g_printf("-");
+	g_printf("\n");
+	g_printf("\nPlease select:\n\t- (D)elete message\n\t- (R)elease message\n\t- (S)how message\n");
+	g_printf("Choice: ");
+	fscanf(stdin, "%s", choice);
+	g_printf("Please enter ID: ");
 	fscanf(stdin, "%d", &id);
 
-	release(id);
+	if (g_ascii_strcasecmp(choice,"s") == 0) {
+		show_message(id);
+	} else if(g_ascii_strcasecmp(choice,"d") == 0) {
+		delete_message(id);
+	} else if (g_ascii_strcasecmp(choice,"r") == 0) {
+		g_printf("Release message\n");
+	} else {
+		g_printf("Unkonwn command\n");
+	}
 }
 
 char *search_quarantine_dir(char *config_file) {
@@ -162,7 +206,6 @@ int main(int argc, char *argv[]) {
 	/* all cmd args */
 	GOptionEntry entries[] = {
 		{ "file", 'f', 0, G_OPTION_ARG_STRING, &config_file, "spmfilter config file", NULL},
-		{ "quarantine", 'q', 0, G_OPTION_ARG_STRING, &quarantine_dir, "spam quarantine directory", NULL},
 		{ NULL }
 	};
 
@@ -178,23 +221,19 @@ int main(int argc, char *argv[]) {
 
 	g_option_context_free(context);
 	if (config_file == NULL) {
-		if (!g_file_test("/etc/spmfilter.conf",G_FILE_TEST_IS_REGULAR)) {
-			if (quarantine_dir == NULL) {
-				g_print("Neither config file, nor quarantine directory provided\n");
-				return 1;
-			} else {
-				check_quarantine(quarantine_dir);
-			}
+		if (!g_file_test(DEFAULT_CONF,G_FILE_TEST_IS_REGULAR)) {
+			g_print("Can't find config file\n");
+			exit(1);
 		} else {
-			/* searching quarantine dir in config file */
-			quarantine_dir = search_quarantine_dir(g_strdup("/etc/spmfilter.conf"));
+			config_file = g_strdup(DEFAULT_CONF);
 		}
-	} else
-		quarantine_dir = search_quarantine_dir(config_file);
+	}
+
+	quarantine_dir = search_quarantine_dir(config_file);
 
 	if (quarantine_dir == NULL) {
-		g_printerr("Neither config file, nor quarantine directory provided\n");
-		return 1;
+		g_printerr("Can't determine quarantine directory\n");
+		exit(1);
 	} else
 		check_quarantine(quarantine_dir);
 
