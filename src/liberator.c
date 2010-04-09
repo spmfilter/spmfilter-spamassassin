@@ -18,13 +18,116 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <glib.h>
 #include <glib/gstdio.h>
+#include <glib/gprintf.h>
 
 #include <spmfilter.h>
 
+#include "liberator.h"
+
+static GSList *messages_found = NULL;
+
+
+int release(int id) {
+	SMFMessageEnvelope_T *envelope = smf_message_envelope_new();
+
+	// NOTE: ID - 1 
+	smf_message_envelope_unref(envelope);
+	return 0;
+}
+
+int scan_directory(gchar *directory) {
+	GDir *dh;
+	GError *error = NULL;
+	const gchar *entryname;
+	struct stat st_info;
+
+	dh = g_dir_open(directory, 0, &error);
+
+	if (error) {
+		g_printerr("g_dir_open(%s) failed - %s\n", directory, error->message);
+		g_error_free(error);
+		return -1;
+	}
+
+	while ((entryname = g_dir_read_name(dh))) {
+		gchar *fullpath;
+
+		fullpath = g_strconcat(directory, G_DIR_SEPARATOR_S, entryname, NULL);
+		if (fullpath) {
+			g_stat(fullpath,&st_info);
+			if(S_ISDIR(st_info.st_mode)) {
+				if (scan_directory(fullpath)!= 0) {
+					return -1;
+				}
+			} else if(S_ISREG(st_info.st_mode)) {
+				if (g_str_has_suffix(fullpath,"info")) {
+					gchar *contents = NULL;
+					gchar **lines = NULL;
+					SMFSpamInfo_T *info = g_slice_new(SMFSpamInfo_T);
+					info->path = g_strndup(fullpath,strlen(fullpath) - 5);
+
+					/* extract informations from file */
+					if(!g_file_get_contents(fullpath,&contents,NULL,&error)) {
+						g_printerr("%s\n",error->message);
+						g_error_free(error);
+					} else {
+						if (contents != NULL) {
+							lines = g_strsplit(contents,"\n",0);
+							while(*lines != NULL) {
+								char **tokens = NULL;
+								tokens = g_strsplit(*lines,":",2);
+								if (g_str_has_prefix(*lines,"subject"))
+									info->subject = g_strdup(tokens[1]);
+								else if (g_str_has_prefix(*lines,"date"))
+									info->date = g_strdup(tokens[1]);
+								else if (g_str_has_prefix(*lines,"score"))
+									info->score = g_strdup(tokens[1]);
+								g_strfreev(tokens);
+								lines++;
+							}
+							g_free(contents);
+							messages_found = g_slist_append(messages_found,info);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
+void display_info(int id, SMFSpamInfo_T *info) {
+	int i;
+	for (i=0; i< 100; i++)
+		g_printf("-");
+	g_printf("\n");
+	g_printf("ID: %d\tSubject: %s\n",id,info->subject);
+	g_printf("\tDate: %s\n",info->date);
+	g_printf("\tScore: %s\n",info->score);
+
+}
+
 void check_quarantine(char *quarantine_dir) {
-	printf("Cheers!\n");
+	int i = 1;
+	int id;
+	scan_directory(quarantine_dir);
+
+	while (messages_found) {
+		display_info(i, (SMFSpamInfo_T *)messages_found->data);
+		messages_found = messages_found->next;
+		i++;
+	}
+
+	g_printf("Enter ID: ");
+	fscanf(stdin, "%d", &id);
+
+	release(id);
 }
 
 char *search_quarantine_dir(char *config_file) {
@@ -34,26 +137,27 @@ char *search_quarantine_dir(char *config_file) {
 
 	keyfile = g_key_file_new ();
 	if (!g_key_file_load_from_file (keyfile, config_file, G_KEY_FILE_NONE, &error)) {
-		printf("Error loading config: %s\n",error->message);
+		g_printerr("Error loading config: %s\n",error->message);
 		g_error_free(error);
 		exit(-1);
 	}
 
 	quarantine_dir = g_key_file_get_string(keyfile, "spamassassin", "quarantine_dir", &error);
 	if (quarantine_dir == NULL) {
-		printf("config error: %s\n", error->message);
+		g_printerr("config error: %s\n", error->message);
 		g_error_free(error);
 		exit(1);
 	}
-	
+
+	g_key_file_free(keyfile);
 	return quarantine_dir;
 }
 
 int main(int argc, char *argv[]) {
 	GOptionContext *context;
 	GError *error = NULL;
-	char *config_file = NULL;
-	char *quarantine_dir = NULL;
+	gchar *config_file = NULL;
+	gchar *quarantine_dir = NULL;
 
 	/* all cmd args */
 	GOptionEntry entries[] = {
@@ -76,7 +180,7 @@ int main(int argc, char *argv[]) {
 	if (config_file == NULL) {
 		if (!g_file_test("/etc/spmfilter.conf",G_FILE_TEST_IS_REGULAR)) {
 			if (quarantine_dir == NULL) {
-				printf("Neither config file, nor quarantine directory provided\n");
+				g_print("Neither config file, nor quarantine directory provided\n");
 				return 1;
 			} else {
 				check_quarantine(quarantine_dir);
@@ -89,15 +193,18 @@ int main(int argc, char *argv[]) {
 		quarantine_dir = search_quarantine_dir(config_file);
 
 	if (quarantine_dir == NULL) {
-		printf("Neither config file, nor quarantine directory provided\n");
+		g_printerr("Neither config file, nor quarantine directory provided\n");
 		return 1;
 	} else
 		check_quarantine(quarantine_dir);
 
+	if (messages_found != NULL)
+		g_slist_free(messages_found);
+
 	if (config_file != NULL)
-		free(config_file);
+		g_free(config_file);
 
 	if (quarantine_dir != NULL)
-		free(quarantine_dir);
+		g_free(quarantine_dir);
 	return 0;
 }
