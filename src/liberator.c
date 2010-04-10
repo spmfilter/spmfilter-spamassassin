@@ -30,13 +30,72 @@
 #include "liberator.h"
 
 static GSList *messages_found = NULL;
+static gchar *quarantine_dir = NULL;
+static gchar *nexthop = NULL;
+
+void get_input(int type, int given) {
+	int i, id;
+	char choice[1024];
+
+	for (i=0; i< 100; i++)
+		g_printf("-");
+	g_printf("\n");
+	g_printf("\nPlease select:\n\t- (D)elete message\n\t- (R)elease message\n");
+	if (type == 0)
+		g_printf("\t- (S)how message\n");
+	if (type == 1)
+		g_printf("\t- (B)ack to quarantine\n");
+	g_printf("\t- (Q)uit\n");
+
+	g_printf("Choice: ");
+	fscanf(stdin, "%s", choice);
+
+	if(g_ascii_strcasecmp(choice,"q") == 0) {
+		exit(0);
+	}
+
+	if (type != 1) {
+		g_printf("Please enter ID: ");
+		fscanf(stdin, "%d", &id);
+	}
+
+	if ((g_ascii_strcasecmp(choice,"s") == 0) && (type == 0)) {
+		show_message(id);
+	} else if(g_ascii_strcasecmp(choice,"d") == 0) {
+		if (given != 0)
+			delete_message(given);
+		else
+			delete_message(id);
+		check_quarantine();
+	} else if(g_ascii_strcasecmp(choice,"r") == 0) {
+		if (given != 0)
+			release_message(given);
+		else
+			release_message(id);
+	} else if((g_ascii_strcasecmp(choice,"b") == 0) && (type == 1)) {
+		check_quarantine();
+	}
+}
 
 
-int release(int id) {
+int release_message(int id) {
 	SMFMessageEnvelope_T *envelope = smf_message_envelope_new();
+	SMFSpamInfo_T *info = (SMFSpamInfo_T *)g_slist_nth_data(messages_found,id - 1);
 
-	// NOTE: ID - 1 
+	while (*info->envelope_to != NULL) {
+		envelope = smf_message_envelope_add_rcpt(envelope,*info->envelope_to);
+		info->envelope_to++;
+	}
+
+	envelope->from = g_strdup(info->envelope_from);
+	envelope->nexthop = g_strdup(nexthop);
+
+	envelope->message_file = info->path;
+
+	smf_message_deliver(envelope);
 	smf_message_envelope_unref(envelope);
+
+	delete_message(id + 1);
 	return 0;
 }
 
@@ -70,7 +129,8 @@ int scan_directory(gchar *directory) {
 					gchar **lines = NULL;
 					SMFSpamInfo_T *info = g_slice_new(SMFSpamInfo_T);
 					info->path = g_strndup(fullpath,strlen(fullpath) - 5);
-
+					info->envelope_to = g_malloc(sizeof(gchar));
+					info->message_to = g_malloc(sizeof(gchar));
 					/* extract informations from file */
 					if(!g_file_get_contents(fullpath,&contents,NULL,&error)) {
 						g_printerr("%s\n",error->message);
@@ -78,6 +138,8 @@ int scan_directory(gchar *directory) {
 					} else {
 						if (contents != NULL) {
 							lines = g_strsplit(contents,"\n",0);
+							int num_env_to = 0;
+							int num_mes_to = 0;
 							while(*lines != NULL) {
 								char **tokens = NULL;
 								tokens = g_strsplit(*lines,":",2);
@@ -87,6 +149,26 @@ int scan_directory(gchar *directory) {
 									info->date = g_strdup(tokens[1]);
 								else if (g_str_has_prefix(*lines,"score"))
 									info->score = g_strdup(tokens[1]);
+								else if (g_str_has_prefix(*lines,"envelope-to")) {
+									info->envelope_to = g_realloc(
+										info->envelope_to,
+										sizeof(gchar) * (num_env_to + 1));
+									info->envelope_to[num_env_to] = g_strdup(tokens[1]);
+									num_env_to++;
+									info->envelope_to[num_env_to] = NULL;
+								} else if (g_str_has_prefix(*lines,"envelope-from"))
+									info->envelope_from = g_strdup(tokens[1]);
+								else if (g_str_has_prefix(*lines,"message-to")) {
+									info->message_to = g_realloc(
+										info->message_to,
+										sizeof(gchar) * (num_mes_to + 1));
+									info->message_to[num_mes_to] = g_strdup(tokens[1]);
+									num_mes_to++;
+									info->message_to[num_mes_to] = NULL;
+								} else if (g_str_has_prefix(*lines,"message-from"))
+									info->message_from = g_strdup(tokens[1]);
+								else if (g_str_has_prefix(*lines,"mid"))
+									info->mid = g_strdup(tokens[1]);
 								g_strfreev(tokens);
 								lines++;
 							}
@@ -116,15 +198,19 @@ void display_info(int id, SMFSpamInfo_T *info) {
 void show_message(int id) {
 	GError *error = NULL;
 	gchar *message = NULL;
+	int i;
 	SMFSpamInfo_T *info = (SMFSpamInfo_T *)g_slist_nth_data(messages_found,id - 1);
-	g_printf("I: %d\n",g_slist_length(messages_found));
-	g_printf("P: %s\n",info->path);
 	if(!g_file_get_contents(info->path,&message,NULL,&error)) {
 		g_printerr("%s\n",error->message);
 		g_error_free(error);
 	} else {
+		for (i=0; i< 100; i++)
+			g_printf("-");
+		g_printf("\n");
 		g_printf("%s",message);
 	}
+
+	get_input(1,id);
 }
 
 void delete_message(int id) {
@@ -138,14 +224,16 @@ void delete_message(int id) {
 		g_printerr("failed to remove message\n");
 		exit(1);
 	}
+
+	messages_found = g_slist_remove(messages_found,info);
+	check_quarantine();
 }
 
-void check_quarantine(char *quarantine_dir) {
-	char choice[1024];
-	int id;
+void check_quarantine(void) {
 	int i = 1;
 	GSList *iter;
-	scan_directory(quarantine_dir);
+	if (messages_found == NULL)
+		scan_directory(quarantine_dir);
 
 	iter = messages_found;
 	while (iter) {
@@ -154,24 +242,7 @@ void check_quarantine(char *quarantine_dir) {
 		i++;
 	}
 
-	for (i=0; i< 100; i++)
-		g_printf("-");
-	g_printf("\n");
-	g_printf("\nPlease select:\n\t- (D)elete message\n\t- (R)elease message\n\t- (S)how message\n");
-	g_printf("Choice: ");
-	fscanf(stdin, "%s", choice);
-	g_printf("Please enter ID: ");
-	fscanf(stdin, "%d", &id);
-
-	if (g_ascii_strcasecmp(choice,"s") == 0) {
-		show_message(id);
-	} else if(g_ascii_strcasecmp(choice,"d") == 0) {
-		delete_message(id);
-	} else if (g_ascii_strcasecmp(choice,"r") == 0) {
-		g_printf("Release message\n");
-	} else {
-		g_printf("Unkonwn command\n");
-	}
+	get_input(0,0);
 }
 
 char *search_quarantine_dir(char *config_file) {
@@ -193,6 +264,13 @@ char *search_quarantine_dir(char *config_file) {
 		exit(1);
 	}
 
+	nexthop = g_key_file_get_string(keyfile, "global","nexthop",&error);
+	if (nexthop == NULL) {
+		g_printerr("config error: %s\n",error->message);
+		g_error_free(error);
+		exit(1);
+	}
+
 	g_key_file_free(keyfile);
 	return quarantine_dir;
 }
@@ -201,7 +279,6 @@ int main(int argc, char *argv[]) {
 	GOptionContext *context;
 	GError *error = NULL;
 	gchar *config_file = NULL;
-	gchar *quarantine_dir = NULL;
 
 	/* all cmd args */
 	GOptionEntry entries[] = {
@@ -235,7 +312,7 @@ int main(int argc, char *argv[]) {
 		g_printerr("Can't determine quarantine directory\n");
 		exit(1);
 	} else
-		check_quarantine(quarantine_dir);
+		check_quarantine();
 
 	if (messages_found != NULL)
 		g_slist_free(messages_found);
