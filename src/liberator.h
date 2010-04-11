@@ -20,6 +20,12 @@
 
 #define DEFAULT_CONF "/etc/spmfilter.conf"
 
+void check_quarantine(void);
+void show_message(int id);
+void delete_message(int id);
+int release_message(int id);
+void get_input(int type, int given);
+
 typedef struct {
 	gchar *subject;
 	gchar *date;

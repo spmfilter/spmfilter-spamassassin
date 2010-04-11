@@ -33,13 +33,25 @@ static GSList *messages_found = NULL;
 static gchar *quarantine_dir = NULL;
 static gchar *nexthop = NULL;
 
-void get_input(int type, int given) {
-	int i, id;
-	char choice[1024];
-
-	for (i=0; i< 100; i++)
+void separator(void) {
+	int i;
+	for (i=0; i< 80; i++)
 		g_printf("-");
 	g_printf("\n");
+}
+
+gboolean check_valid_id(int id) {
+	if (g_slist_length(messages_found) >= id)
+		return TRUE;
+	else
+		return FALSE;
+}
+
+void get_input(int type, int given) {
+	int id;
+	char choice[1];
+
+	separator();
 	g_printf("\nPlease select:\n\t- (D)elete message\n\t- (R)elease message\n");
 	if (type == 0)
 		g_printf("\t- (S)how message\n");
@@ -50,30 +62,54 @@ void get_input(int type, int given) {
 	g_printf("Choice: ");
 	fscanf(stdin, "%s", choice);
 
+	if (strlen(choice) == 0)
+		g_printf("Invalid choice\n");
+
 	if(g_ascii_strcasecmp(choice,"q") == 0) {
 		exit(0);
 	}
 
-	if (type != 1) {
+	if ((g_ascii_strcasecmp(choice,"s") == 0) && (type == 0)) {
 		g_printf("Please enter ID: ");
 		fscanf(stdin, "%d", &id);
-	}
-
-	if ((g_ascii_strcasecmp(choice,"s") == 0) && (type == 0)) {
-		show_message(id);
+		if (check_valid_id(id))
+			show_message(id);
+		else {
+			g_printf("Invalid ID\n");
+			get_input(type,given);
+		}
 	} else if(g_ascii_strcasecmp(choice,"d") == 0) {
 		if (given != 0)
 			delete_message(given);
-		else
-			delete_message(id);
+		else {
+			g_printf("Please enter ID: ");
+			fscanf(stdin, "%d", &id);
+			if (check_valid_id(id))
+				delete_message(id - 1);
+			else {
+				g_printf("Invalid ID\n");
+				get_input(type,given);
+			}
+		}
 		check_quarantine();
 	} else if(g_ascii_strcasecmp(choice,"r") == 0) {
 		if (given != 0)
 			release_message(given);
-		else
-			release_message(id);
+		else {
+			g_printf("Please enter ID: ");
+			fscanf(stdin, "%d", &id);
+			if (check_valid_id(id))
+				release_message(id);
+			else {
+				g_printf("Invalid ID\n");
+				get_input(type,given);
+			}
+		}
 	} else if((g_ascii_strcasecmp(choice,"b") == 0) && (type == 1)) {
 		check_quarantine();
+	} else {
+		g_printf("Unknown choice\n");
+		get_input(type,given);
 	}
 }
 
@@ -95,7 +131,7 @@ int release_message(int id) {
 	smf_message_deliver(envelope);
 	smf_message_envelope_unref(envelope);
 
-	delete_message(id + 1);
+	delete_message(id);
 	return 0;
 }
 
@@ -185,28 +221,23 @@ int scan_directory(gchar *directory) {
 }
 
 void display_info(int id, SMFSpamInfo_T *info) {
-	int i;
-	for (i=0; i< 100; i++)
-		g_printf("-");
+	separator();
 	g_printf("\n");
 	g_printf("ID: %d\tSubject: %s\n",id,info->subject);
 	g_printf("\tDate: %s\n",info->date);
 	g_printf("\tScore: %s\n",info->score);
-
 }
 
 void show_message(int id) {
 	GError *error = NULL;
 	gchar *message = NULL;
-	int i;
 	SMFSpamInfo_T *info = (SMFSpamInfo_T *)g_slist_nth_data(messages_found,id - 1);
+
 	if(!g_file_get_contents(info->path,&message,NULL,&error)) {
 		g_printerr("%s\n",error->message);
 		g_error_free(error);
 	} else {
-		for (i=0; i< 100; i++)
-			g_printf("-");
-		g_printf("\n");
+		separator();
 		g_printf("%s",message);
 	}
 
@@ -214,7 +245,7 @@ void show_message(int id) {
 }
 
 void delete_message(int id) {
-	SMFSpamInfo_T *info = (SMFSpamInfo_T *)g_slist_nth_data(messages_found,id - 1);
+	SMFSpamInfo_T *info = (SMFSpamInfo_T *)g_slist_nth_data(messages_found,id);
 	if (g_remove(info->path) != 0) {
 		g_printerr("failed to remove message\n");
 		exit(1);
