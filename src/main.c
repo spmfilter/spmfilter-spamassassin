@@ -21,6 +21,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <unistd.h>
+#include <time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -44,6 +45,9 @@ int write_to_quarantine(char *score) {
 	char *md5;
 	int c,i;
 	FILE *fh;
+	time_t now;
+	struct tm tim;
+	gchar tmp_buffer[256];
 
 	md5 = smf_md5sum(filename);
 	quarantine_path = g_strdup(spam_settings->quarantine_dir);
@@ -91,7 +95,12 @@ int write_to_quarantine(char *score) {
 	}
 
 	fprintf(fh,"subject:%s\n",smf_session_header_get("subject"));
-	fprintf(fh,"date:%s\n",smf_session_header_get("date"));
+
+	now = time(NULL);
+	tim = *(localtime(&now));
+	strftime(tmp_buffer,256,"%F %H:%M:%S\n",&tim);
+    fprintf(fh,"date:%s\n",tmp_buffer);
+
 	fprintf(fh,"score:%s\n",score);
 	fclose(fh);
 

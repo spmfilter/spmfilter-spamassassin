@@ -162,7 +162,7 @@ int scan_directory(gchar *directory) {
 			} else if(S_ISREG(st_info.st_mode)) {
 				if (g_str_has_suffix(fullpath,"info")) {
 					gchar *contents = NULL;
-					gchar **lines = NULL;
+					gchar **lines = NULL;	
 					SMFSpamInfo_T *info = g_slice_new(SMFSpamInfo_T);
 					info->path = g_strndup(fullpath,strlen(fullpath) - 5);
 					info->envelope_to = g_malloc(sizeof(gchar));
@@ -221,11 +221,27 @@ int scan_directory(gchar *directory) {
 }
 
 void display_info(int id, SMFSpamInfo_T *info) {
-	separator();
+	g_printf("%d\t%s\t\t%s",id,info->score,info->date);
+	if (info->envelope_from != NULL)
+		g_printf("\t%s\n",info->envelope_from);
+	else if(info->message_from != NULL)
+		g_printf("\t%s\n",info->message_from);
+	else
+		g_printf("\tundef\n");
+
+	if (*info->envelope_to != NULL) {
+		while (*info->envelope_to != NULL) {
+			g_printf("\t\t\t\t\t\t%s\n",*info->envelope_to);
+			info->envelope_to++;
+		}
+	} else if (*info->message_to != NULL) {
+		while (*info->message_to != NULL) {
+			g_printf("\t\t\t\t\t\t%s\n",*info->message_to);
+			info->message_to++;
+		}
+	} else
+		g_printf("\t\t\t\t\t\tundef\n");
 	g_printf("\n");
-	g_printf("ID: %d\tSubject: %s\n",id,info->subject);
-	g_printf("\tDate: %s\n",info->date);
-	g_printf("\tScore: %s\n",info->score);
 }
 
 void show_message(int id) {
@@ -266,9 +282,10 @@ void check_quarantine(void) {
 	if (messages_found == NULL)
 		scan_directory(quarantine_dir);
 
+	g_printf("-ID-\t-Score-\t\t-Date-\t\t\t-Sender/Recipient-\n");
 	iter = messages_found;
 	while (iter) {
-		display_info(i, (SMFSpamInfo_T *)messages_found->data);
+		display_info(i, (SMFSpamInfo_T *)iter->data);
 		iter = iter->next;
 		i++;
 	}
