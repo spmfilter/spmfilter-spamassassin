@@ -130,7 +130,7 @@ int main(int argc, char *argv[]) {
 
 	/* all cmd args */
 	GOptionEntry entries[] = {
-		{ "directory", 'd', 0, G_OPTION_ARG_STRING, &quarantine_dir, "spam quarantine diretctory", NULL},
+		{ "quarantine", 'q', 0, G_OPTION_ARG_STRING, &quarantine_dir, "spam quarantine diretctory", NULL},
 		{ NULL }
 	};
 
