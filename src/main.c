@@ -47,9 +47,12 @@ int write_to_quarantine(char *score) {
 	FILE *fh;
 	time_t now;
 	struct tm tim;
-	gchar tmp_buffer[256];
+	char tmp_buffer[256];
+	char *strrand;
 
+	filename = smf_core_get_maildir_filename();
 	md5 = smf_md5sum(filename);
+
 	quarantine_path = g_strdup(spam_settings->quarantine_dir);
 	for(c=0; c <=5; c++) {
 		quarantine_path = g_strdup_printf("%s/%c",quarantine_path,md5[c]);
@@ -61,9 +64,14 @@ int write_to_quarantine(char *score) {
 		free(quarantine_path);
 		return -1;
 	}
-	filename = smf_core_get_maildir_filename();
-	quarantine_filename = g_strdup_printf("%s/%s",quarantine_path,filename);
-	quarantine_info = g_strdup_printf("%s.info",quarantine_filename);
+
+	srand(time(0));
+	strrand = malloc(3);
+	for(i=0;i < 3; i++)
+		strrand[i] = RANDPOOL[rand()%strlen(RANDPOOL)];
+	strrand[i++] = '\0';
+	quarantine_filename = g_strdup_printf("%s/%s.%s",quarantine_path,strrand,filename);
+	quarantine_info = g_strdup_printf("%s.i",quarantine_filename);
 	TRACE(TRACE_DEBUG,"writting message to quarantine [%s]",quarantine_filename);
 	smf_session_to_file(quarantine_filename);
 
@@ -78,30 +86,35 @@ int write_to_quarantine(char *score) {
 		return -1;
 	}
 
-	fprintf(fh,"mid:%s\n",smf_session_header_get("message-id"));
 	if (session->envelope_from != NULL)
-		fprintf(fh,"envelope-from:%s\n",session->envelope_from->addr);
+		fprintf(fh,"sender:%s\n",session->envelope_from->addr);
+	else if (session->message_from != NULL)
+		fprintf(fh,"sender:%s\n",session->message_from->addr);
+	else
+		fprintf(fh,"sender:undef\n");
+	
 	if (session->envelope_to != NULL) {
 		for(i = 0; i < session->envelope_to_num; i++) {
-			fprintf(fh,"envelope-to:%s\n",session->envelope_to[i]->addr);
+			fprintf(fh,"recipient:%s\n",session->envelope_to[i]->addr);
 		}
-	}
-	if (session->message_from != NULL)
-		fprintf(fh,"message-from:%s\n",session->message_from->addr);
-	if (session->message_to != NULL) {
+	} else if (session->message_to != NULL) {
 		for(i = 0; i < session->message_to_num; i++) {
-			fprintf(fh,"message-to:%s\n",session->message_to[i]->addr);
+			fprintf(fh,"recipient:%s\n",session->message_to[i]->addr);
 		}
-	}
-
-	fprintf(fh,"subject:%s\n",smf_session_header_get("subject"));
+	} else
+		fprintf(fh,"recipient:undef\n");
 
 	now = time(NULL);
 	tim = *(localtime(&now));
-	strftime(tmp_buffer,256,"%F %H:%M:%S\n",&tim);
+	strftime(tmp_buffer,256,"%F %H:%M:%S",&tim);
     fprintf(fh,"date:%s\n",tmp_buffer);
 
 	fprintf(fh,"score:%s\n",score);
+	fprintf(fh,"qid:");
+	for(c=0; c <=5; c++)
+		fprintf(fh,"%c",md5[c]);
+	fprintf(fh,"%s\n",strrand);
+
 	fclose(fh);
 
 	free(md5);
@@ -109,7 +122,7 @@ int write_to_quarantine(char *score) {
 	free(quarantine_path);
 	free(quarantine_filename);
 	free(quarantine_info);
-
+	free(strrand);
 	return 0;
 }
 

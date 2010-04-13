@@ -21,6 +21,7 @@
 #define CMD_PROCESS "PROCESS SPAMC/1.2\r\n"
 #define CMD_SIZE "Content-length:"
 #define CMD_USERNAME "User:"
+#define RANDPOOL "0123456789abcdefghijklmnopqrstuvwxyz"
 
 enum {
 	BUFSIZE = 1024
