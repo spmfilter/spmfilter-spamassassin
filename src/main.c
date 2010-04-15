@@ -29,6 +29,7 @@
 #include <glib/gstdio.h>
 
 #include <spmfilter.h>
+#include <spmfilter_config.h>
 
 #include "main.h"
 
@@ -273,9 +274,10 @@ int perform_scan(char *username) {
 
 	if (is_spam) {
 		if (spam_settings->reject_spam) {
-			if (spam_settings->reject_msg != NULL) 
-				session->response_msg = g_strdup(spam_settings->reject_msg);
-
+			if (SMF_VERSION >= 4001) {
+				if (spam_settings->reject_msg != NULL)
+					session->response_msg = g_strdup(spam_settings->reject_msg);
+			}
 			return 554;
 		} else {
 			if (spam_settings->quarantine_dir != NULL) {
