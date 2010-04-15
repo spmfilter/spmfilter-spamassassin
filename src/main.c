@@ -272,19 +272,26 @@ int perform_scan(char *username) {
 	g_free(new_queue_file);
 
 	if (is_spam) {
-		if (spam_settings->quarantine_dir != NULL) {
-			if (write_to_quarantine(score) != 0) {
-				if (score != NULL)
-					free(score);
-				return -1;
-			}
+		if (spam_settings->reject_spam) {
+			if (spam_settings->reject_msg != NULL) 
+				session->response_msg = g_strdup(spam_settings->reject_msg);
 
-		} else 
-			TRACE(TRACE_INFO,"no quarantine configured, message discarded");
-		
-		if (score	!= NULL)
-			free(score);
-		return 1;
+			return 554;
+		} else {
+			if (spam_settings->quarantine_dir != NULL) {
+				if (write_to_quarantine(score) != 0) {
+					if (score != NULL)
+						free(score);
+					return -1;
+				}
+
+			} else
+				TRACE(TRACE_INFO,"no quarantine configured, message discarded");
+
+			if (score	!= NULL)
+				free(score);
+			return 1;
+		}
 	} else
 		return 0;
 }
@@ -304,10 +311,14 @@ int get_spam_config(void) {
 		spam_settings->port = 783;
 
 	spam_settings->quarantine_dir = smf_settings_group_get_string("quarantine_dir");
-
+	spam_settings->reject_spam = smf_settings_group_get_boolean("reject_spam");
+	spam_settings->reject_msg = smf_settings_group_get_string("reject_msg");
+	
 	TRACE(TRACE_DEBUG,"spam_settings->host: %s",spam_settings->host);
 	TRACE(TRACE_DEBUG,"spam_settings->port: %d",spam_settings->port);
 	TRACE(TRACE_DEBUG,"spam_settings->quarantine_dir: %s", spam_settings->quarantine_dir);
+	TRACE(TRACE_DEBUG,"spam_settings->reject_spam: %d",spam_settings->reject_spam);
+	TRACE(TRACE_DEBUG,"spam_settings->reject_msg: %s",spam_settings->reject_msg);
 
 	return 0;
 }
@@ -318,7 +329,6 @@ int load(SMFSession_T *session) {
 	if (get_spam_config()!=0)
 		return -1;
 
-	// TODO: send username for spamd user command
 	ret = perform_scan(NULL);
 	g_slice_free(SpamSettings_T,spam_settings);
 

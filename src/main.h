@@ -22,6 +22,7 @@
 #define CMD_SIZE "Content-length:"
 #define CMD_USERNAME "User:"
 #define RANDPOOL "0123456789abcdefghijklmnopqrstuvwxyz"
+#define DEFAULT_MSG "Message blocked, identified as spam"
 
 enum {
 	BUFSIZE = 1024
@@ -31,6 +32,8 @@ typedef struct {
 	char *host;
 	int port;
 	char *quarantine_dir;
+	gboolean reject_spam;
+	char *reject_msg;
 } SpamSettings_T;
 
 #endif	/* _MAIN_H */
