@@ -220,7 +220,8 @@ int main(int argc, char *argv[]) {
 			g_printerr("Please supply quarantine id\n");
 			exit(1);
 		}
-	}
+	} else 
+		exit(1);
 
 	message_path = get_path(qid);
 

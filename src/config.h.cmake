@@ -15,26 +15,9 @@
  * License along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef _MAIN_H
-#define	_MAIN_H
+#ifndef _CONFIG_H
+#define	_CONFIG_H
 
-#define CMD_PROCESS "PROCESS SPAMC/1.2\r\n"
-#define CMD_SIZE "Content-length:"
-#define CMD_USERNAME "User:"
-#define RANDPOOL "0123456789abcdefghijklmnopqrstuvwxyz"
-#define DEFAULT_MSG "Message blocked, identified as spam"
+#cmakedefine HAVE_SPMFILTER04
 
-enum {
-	BUFSIZE = 1024
-};
-
-typedef struct {
-	gchar *host;
-	int port;
-	gchar *quarantine_dir;
-	gboolean reject_spam;
-	gchar *reject_msg;
-} SpamSettings_T;
-
-#endif	/* _MAIN_H */
-
+#endif	/* _CONFIG_H */

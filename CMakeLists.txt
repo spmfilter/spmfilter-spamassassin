@@ -21,6 +21,10 @@ pkg_search_module(SPMFILTER REQUIRED spmfilter >= 0.4)
 if(SPMFILTER_FOUND)
     include_directories(${SPMFILTER_INCLUDE_DIRS})
     link_directories(${SPMFILTER_LIBRARY_DIRS})
+	set(VERSION_REGEX "0\\.4\\.[0-9]+")
+	if(${SPMFILTER_VERSION} MATCHES ${VERSION_REGEX})
+		set(HAVE_SPMFILTER04 TRUE)
+	endif(${SPMFILTER_VERSION} MATCHES ${VERSION_REGEX})
 endif(SPMFILTER_FOUND)
 
 # check for enabled debugging
@@ -38,6 +42,12 @@ endif(GLIB2_FOUND)
 
 # check out current version
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/VERSION PLUGIN_VERSION)
+
+# write config.h
+CONFIGURE_FILE(
+	${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.cmake
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/config.h
+)
 
 add_subdirectory(src)
 
