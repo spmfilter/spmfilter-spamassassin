@@ -305,7 +305,7 @@ int perform_scan(SMFSession_T *session,SpamSettings_T *spam_settings) {
 
 	if (is_spam) {
 		if (spam_settings->reject_spam) {
-#ifdef HAVE_SPMFILTER04
+#ifndef HAVE_SPMFILTER04
 				if (spam_settings->reject_msg != NULL)
 					session->response_msg = g_strdup(spam_settings->reject_msg);
 #endif
