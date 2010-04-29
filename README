@@ -1,0 +1,74 @@
+WHAT IS SPMFILTER-SPAMASSASSIN?
+-------------------------------
+
+spamassassin is a plugin for spmfilter that enables spmfilter to spam-check emails with the 
+help of the daemonized version of Spamassassin (spamd). The major goal of this plugin is to 
+provide an easy way for spam-checking messages. Currently the message is given to spamd which 
+actually takes care of spam-checking the message, after completion the email is simply passed 
+back to spmfilter which takes care of further processing. Activation of the module is done by 
+adding spamassassin to the modules-variable within the [global]-section in spmfilter.conf like 
+follows:
+
+[global]
+...
+modules = spamassassin
+...
+
+Configuration for spamassassin is done by adding a new section for spamassassin to the spmfilter.conf:
+
+[spamassassin]
+host = 127.0.0.1
+port = 783
+quarantine_dir = /var/spool/spam
+reject_spam = false
+reject_msg = message identified as spam
+
+If you're running spmfilter with spamassassin plugin as after-queue-filter and reject_spam is set to 
+true, then you are going to generate bounce messages! So please make sure, you are using reject_spam 
+only as pre-queue-filter.
+
+
+WEB SITE
+--------
+
+The main spmfilter site is here:
+
+	http://www.spmfilter.org
+
+You'll find a FAQ list, downloads, resources, HTML versions of the
+manpages, etc.
+
+
+MAILING LISTS
+-------------
+
+There are two mailing lists devoted to spmfilter.
+
+  - Users mailing list (http://groups.google.com/group/spmfilter-users)
+    The main list for help and announcements.
+  
+  - Developers mailing list (http://groups.google.com/group/spmfilter-devel)
+    The developers mailing list is used for discussions and questions about 
+    the development of spmfilter or plugins.
+
+
+BUG REPORTS
+-----------
+
+To visit this web page for full the details on bug reporting:
+
+	http://www.spmfilter.org/projects/spmfilter/issues
+
+
+MERCURIAL REPOSITORY
+--------------------
+
+If you want to get the very latest version of spmfilter direct from the
+source code repository then you can use mercurial:
+
+	hg clone http://www.spmfilter.org/hg/spmfilter-spamassassin
+	
+See the download page for full details on all the ways to grab the
+source web-browsing of the mercurial repository, etc.:
+
+	http://www.spmfilter.org/projects/spmfilter/files
