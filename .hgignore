@@ -31,3 +31,4 @@ CMakeCache*
 cmake_install.cmake
 install_manifest.txt
 spmfilter-spamassassin-Makefile.mk
+^src/config\.h$

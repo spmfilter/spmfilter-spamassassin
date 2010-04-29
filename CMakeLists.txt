@@ -15,7 +15,10 @@ if(NOT LIBDIR)
         set(LIBDIR "lib")
 endif(NOT LIBDIR)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+
 include(FindPkgConfig)
+include(SMFMacros)
 
 pkg_search_module(SPMFILTER REQUIRED spmfilter >= 0.4)
 if(SPMFILTER_FOUND)
@@ -50,6 +53,7 @@ CONFIGURE_FILE(
 )
 
 add_subdirectory(src)
+add_subdirectory(man)
 
 set(CPACK_PACKAGE_NAME "spmfilter-spamassassin")
 set(CPACK_PACKAGE_VENDOR "spmfilter.org")

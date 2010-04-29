@@ -1,0 +1,82 @@
+.TH "spmfilter-spamassassin" "1" "29 April 2010" "" ""
+
+.SH "NAME"
+spmfilter-spamassassin - spmfilter plugin
+.SH "SYNOPSIS"
+.P
+\fB[spamassassin]\fR
+
+.SH "DESCRIPTION"
+.P
+
+spamassassin is a plugin for spmfilter that enables spmfilter to spam-check
+emails with the help of the daemonized version of Spamassassin (spamd). The
+major goal of this plugin is to provide an easy way for spam-checking messages.
+Currently the message is given to spamd which actually takes care of spam-checking
+the message, after completion the email is simply passed back to spmfilter which
+takes care of further processing. Activation of the module is done by adding
+spamassassin to the modules-variable within the [global] section in
+spmfilter.conf like follows:
+
+[global]
+.br
+ ...
+.br
+modules = spamassassin
+.br
+ ...
+
+
+
+
+.SH "OPTIONS"
+.P
+Configuration for spamassassin is done by adding a new section for spamassassin to
+the spmfilter.conf:
+
+[spamassassin]
+.br
+host = 127.0.0.1
+.br
+port = 783
+.br
+quarantine_dir = /var/spool/spam
+.br
+reject_spam = false
+.br
+reject_msg = message identified as spam
+
+
+
+Following options are needed:
+
+.IP \fBhost\fR
+IP-address of the Spamassassin-daemon. This option is mandatory.
+
+.IP \fBport\fR
+Port on which the Spamassassin-daemon listens. This parameter is optional,
+port 783 is used as default if the port is not defined.
+
+.IP \fBquarantine_dir\fR 
+Defines the absolute path to the quarantine directory. This option is mandatory,
+so please make sure the path exists and is read/writeable for the spmfilter user.
+
+.IP \fBreject_spam\fR true|false
+If set to true, the plugin will reject spam messages. It is no good idea
+to reject messages, if spmfilter is configured as after queue filter.
+
+.IP \fBreject_msg\fR
+If reject_spam is set to true, reject_msg will be used as smtp response message.
+
+.P
+Please note that all configuration concerning spam (like required_score, etc)
+is done within the Spamassassin-configuration. The spmfilter spamassassin-plugin
+therefor only needs to know on which ip-address and port spamd listens at.
+
+.SH "SEE ALSO"
+.P
+spmfilter.conf(5), spmfilter(1), smf-spamctl(1), smf-spamq(1)
+
+.SH "AUTHOR(S)"
+.P
+spmfilter-spamassassin was written by Axel Steiner <ast@treibsand.com>

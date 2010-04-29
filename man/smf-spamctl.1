@@ -1,0 +1,45 @@
+.TH "smf-spamctl" "1" "29 Apr 2010" "" ""
+
+.SH "NAME"
+smf-spamctl - spmfilter-spamassassin quarantine control
+.SH "SYNOPSIS"
+.P
+\fBsmf-spamq [-f \fIconfig_file\fB] -i \fIquarantine_id\fB -r\fR
+.br
+\fBsmf-spamq [-f \fIconfig_file\fB] -i \fIquarantine_id\fB -d\fR
+.br
+\fBsmf-spamq [-f \fIconfig_file\fB] -i \fIquarantine_id\fB -s\fR
+.SH "DESCRIPTION"
+.P
+The \fBsmf-spamctl\fR(1) command does maintenance jobs on the
+spmfilter-spamassassin spam quarantine.
+
+.SH "OPTIONS"
+.P
+The following command-line options are implemented:
+
+.IP "\fB-f \fIconfig_file\fR (or --file)"
+Path to spmfilter.conf (default /etc/spmfilter.conf).
+
+.IP "\fB-r \fR(or --release)"
+Release message from quarantine.
+
+.IP "\fB-d \fR(or --delete)"
+Delete message from quarantine.
+
+.IP "\fB-s \fR(or --show)"
+Show message.
+
+.IP "\fB-i \fIquarantine_id\fR (or --show)"
+Quarantine id of message.
+
+.IP "\fB-?\fR (or --help)"
+Print smf-spamq usage.
+
+.SH "SEE ALSO"
+.P
+spmfilter-spamassassin(1), smf-spamq(1), spmfilter.conf(5), spmfilter(1)
+
+.SH "AUTHOR(S)"
+.P
+spmfilter-spamassassin was written by Axel Steiner <ast@treibsand.com>
