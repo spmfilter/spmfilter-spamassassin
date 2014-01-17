@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 2.6)
 
 project(spmfilter-spamassassin)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
+include(FindPkgConfig)
+include(SMFMacros)
+
 # check for build.properties
 include("${CMAKE_SOURCE_DIR}/build.properties" OPTIONAL)
 
@@ -10,24 +14,10 @@ if(PREFIX)
     SET(CMAKE_INSTALL_PREFIX ${PREFIX})
 endif(PREFIX)
 
-# check libdir
-if(NOT LIBDIR)
-        set(LIBDIR "lib")
-endif(NOT LIBDIR)
-
-set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/Modules/")
-
-include(FindPkgConfig)
-include(SMFMacros)
-
-pkg_search_module(SPMFILTER REQUIRED spmfilter >= 0.4)
+pkg_search_module(SPMFILTER REQUIRED spmfilter >= 0.6)
 if(SPMFILTER_FOUND)
     include_directories(${SPMFILTER_INCLUDE_DIRS})
     link_directories(${SPMFILTER_LIBRARY_DIRS})
-	set(VERSION_REGEX "0\\.4\\.[0-9]+")
-	if(${SPMFILTER_VERSION} MATCHES ${VERSION_REGEX})
-		set(HAVE_SPMFILTER04 TRUE)
-	endif(${SPMFILTER_VERSION} MATCHES ${VERSION_REGEX})
 endif(SPMFILTER_FOUND)
 
 # check for enabled debugging
@@ -36,21 +26,16 @@ if(ENABLE_DEBUG)
     add_definitions(-DDEBUG -g -O0 -Wall)
 endif(ENABLE_DEBUG)
 
-# check for glib2
-pkg_search_module(GLIB2 REQUIRED glib-2.0)
-if(GLIB2_FOUND)
-    include_directories(${GLIB2_INCLUDE_DIRS})
-    link_directories(${GLIB2_LIBRARY_DIRS})
-endif(GLIB2_FOUND)
-
-# check out current version
+set(THREE_PART_VERSION_REGEX "[0-9]+\\.[0-9]+\\.[0-9]+")
 file(READ ${CMAKE_CURRENT_SOURCE_DIR}/VERSION PLUGIN_VERSION)
-
-# write config.h
-CONFIGURE_FILE(
-	${CMAKE_CURRENT_SOURCE_DIR}/src/config.h.cmake
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/config.h
-)
+if(${PLUGIN_VERSION} MATCHES ${THREE_PART_VERSION_REGEX})
+    string(REGEX REPLACE "^([0-9]+)\\.[0-9]+\\.[0-9]+" "\\1" PLUGIN_MAJOR_VERSION ${PLUGIN_VERSION})
+    string(REGEX REPLACE "^[0-9]+\\.([0-9])+\\.[0-9]+" "\\1" PLUGIN_MINOR_VERSION ${PLUGIN_VERSION})
+    string(REGEX REPLACE "^[0-9]+\\.[0-9]+\\.([0-9]+)" "\\1" PLUGIN_MICRO_VERSION ${PLUGIN_VERSION})
+else(${PLUGIN_VERSION} MATCHES ${THREE_PART_VERSION_REGEX})
+    message(FATAL_ERROR "Problem parsing version string, I can't parse it properly.")
+endif(${PLUGIN_VERSION} MATCHES ${THREE_PART_VERSION_REGEX})
+set(PLUGIN_SO_VERSION "${PLUGIN_MAJOR_VERSION}.${PLUGIN_MINOR_VERSION}")
 
 add_subdirectory(src)
 add_subdirectory(man)
@@ -65,12 +50,9 @@ set(CPACK_COMPONENTS_ALL applications libraries headers)
 set(CPACK_SOURCE_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${PLUGIN_VERSION}")
 set(CPACK_SOURCE_GENERATOR TGZ)
 set(CPACK_SOURCE_IGNORE_FILES
-"\\\\.hg"
-"nbproject"
-"cmake_build"
+"\\\\.git"
+"build"
 "build\\\\.properties"
-"spmfilter-spamassassin-Makefile\\\\.mk"
-"\\\\.dep\\\\.inc"
 )
 
 include(CPack)
